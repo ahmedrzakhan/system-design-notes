@@ -1,16 +1,19 @@
 # Yelp System Design Interview Guide
 
 ## 📍 What is Yelp?
+
 Yelp is an online platform that allows users to search for and review local businesses, restaurants, and services.
 
 ## 🎯 Functional Requirements
 
 ### Core Requirements
+
 1. **Search for businesses** by name, location (lat/long), and category
 2. **View businesses** and their reviews
 3. **Leave reviews** on businesses (1-5 star rating + optional text)
 
 ### Out of Scope
+
 - Admin features (add/update/remove businesses)
 - View businesses on a map
 - Business recommendations
@@ -18,6 +21,7 @@ Yelp is an online platform that allows users to search for and review local busi
 ## ⚡ Non-Functional Requirements
 
 ### Core Requirements
+
 1. **Low latency** for search operations (< 500ms)
 2. **Highly available**, eventual consistency is fine
 3. **Scalable** to handle:
@@ -26,6 +30,7 @@ Yelp is an online platform that allows users to search for and review local busi
    - ~1TB of data (10M businesses × 100 reviews × 1KB)
 
 ### Additional Considerations
+
 - GDPR compliance
 - Fault tolerance
 - Spam/abuse protection
@@ -33,11 +38,13 @@ Yelp is an online platform that allows users to search for and review local busi
 ## 📊 Key Metrics & Insights
 
 ### Read/Write Ratio
+
 - **Extremely read-heavy**: 1000:1 ratio
 - 100M users → ~100k writes/day → ~1 write/second
 - **Key insight**: Write volume is tiny, no need for complex queueing systems
 
 ### Data Volume
+
 - 10M businesses × 1KB = 10GB
 - 10M businesses × 100 reviews × 1KB = 1TB
 - **Key insight**: Small data volume, single database instance sufficient
@@ -49,26 +56,26 @@ Yelp is an online platform that allows users to search for and review local busi
 ```mermaid
 graph TB
     Client[Client<br/>Web/Mobile]
-    
+
     subgraph "API Layer"
         Gateway[API Gateway<br/>- Authentication<br/>- Rate Limiting<br/>- Routing]
     end
-    
+
     subgraph "Service Layer"
         BS[Business Service<br/>- Search<br/>- View]
         RS[Review Service<br/>- Create Reviews<br/>- Update Ratings]
     end
-    
+
     subgraph "Data Layer"
         DB[(Primary Database<br/>PostgreSQL)]
         ES[Elasticsearch<br/>Search Index]
         Cache[Cache<br/>Redis]
     end
-    
+
     subgraph "Data Sync"
         CDC[CDC Pipeline<br/>Change Data Capture]
     end
-    
+
     Client --> Gateway
     Gateway --> BS
     Gateway --> RS
@@ -96,13 +103,13 @@ erDiagram
         int numRatings
         string[] locationStrings
     }
-    
+
     User {
         bigint id PK
         string name
         string email
     }
-    
+
     Review {
         bigint id PK
         bigint userId FK
@@ -111,14 +118,14 @@ erDiagram
         text text
         timestamp createdAt
     }
-    
+
     Location {
         bigint id PK
         string name
         string type
         polygon points
     }
-    
+
     User ||--o{ Review : writes
     Business ||--o{ Review : has
     Business }o--o{ Location : belongs_to
@@ -152,6 +159,7 @@ Body: {
 ### 1. Average Rating Calculation
 
 #### ❌ Bad: On-the-fly calculation
+
 ```sql
 -- Expensive JOIN operation for every search
 SELECT b.*, AVG(r.rating) AS avg_rating
@@ -161,18 +169,20 @@ GROUP BY b.id;
 ```
 
 #### ✅ Good: Periodic update with cron job
+
 - Pre-compute ratings periodically (hourly/daily)
 - Store in `avgRating` column
 - **Issue**: Stale data between updates
 
 #### ✅✅ Great: Synchronous update with optimistic locking
+
 ```sql
 -- Add numRatings column to businesses table
 -- Update synchronously on each new review
 new_avg = (old_avg * num_reviews + new_rating) / (num_reviews + 1)
 
 -- Use optimistic locking to handle concurrent updates
-UPDATE businesses 
+UPDATE businesses
 SET avg_rating = ?, num_ratings = ?
 WHERE id = ? AND num_ratings = ?
 ```
@@ -180,6 +190,7 @@ WHERE id = ? AND num_ratings = ?
 ### 2. One Review Per User Constraint
 
 #### ❌ Bad: Application-level check
+
 ```python
 def leave_review(user_id, business_id):
     if user_already_reviewed(user_id, business_id):
@@ -188,9 +199,10 @@ def leave_review(user_id, business_id):
 ```
 
 #### ✅✅ Great: Database constraint
+
 ```sql
 ALTER TABLE reviews
-ADD CONSTRAINT unique_user_business 
+ADD CONSTRAINT unique_user_business
 UNIQUE (user_id, business_id);
 ```
 
@@ -198,15 +210,16 @@ UNIQUE (user_id, business_id);
 
 #### Search Requirements by Type
 
-| Search Type | Index Type | Technology |
-|------------|------------|------------|
-| **Location** | Geospatial (R-tree, Quadtree, Geohash) | PostGIS, Elasticsearch |
-| **Name/Text** | Full-text (Inverted index) | pg_trgm, Elasticsearch |
-| **Category** | B-tree | Standard DB index |
+| Search Type   | Index Type                             | Technology             |
+| ------------- | -------------------------------------- | ---------------------- |
+| **Location**  | Geospatial (R-tree, Quadtree, Geohash) | PostGIS, Elasticsearch |
+| **Name/Text** | Full-text (Inverted index)             | pg_trgm, Elasticsearch |
+| **Category**  | B-tree                                 | Standard DB index      |
 
 #### Solution Options
 
 ##### Option 1: Elasticsearch
+
 ```mermaid
 graph LR
     DB[(PostgreSQL)] -->|CDC| Queue[Message Queue]
@@ -216,35 +229,40 @@ graph LR
 ```
 
 **Pros:**
+
 - Purpose-built for search
 - Excellent geospatial support
 - Great full-text search
 
 **Cons:**
+
 - Consistency challenges
 - Not suitable as primary DB
 - Additional infrastructure
 
 ##### Option 2: PostgreSQL with Extensions
+
 ```sql
 -- Enable extensions
 CREATE EXTENSION postgis;      -- Geospatial
 CREATE EXTENSION pg_trgm;      -- Full-text search
 
 -- Create indexes
-CREATE INDEX idx_location ON businesses 
+CREATE INDEX idx_location ON businesses
 USING GIST(geography(location));
 
-CREATE INDEX idx_name ON businesses 
+CREATE INDEX idx_name ON businesses
 USING GIN(name gin_trgm_ops);
 ```
 
 **Pros:**
+
 - Single database (simpler)
 - Strong consistency
 - Good for our data volume
 
 **Cons:**
+
 - Less optimized than Elasticsearch at scale
 
 ### 4. Location-based Search (Cities/Neighborhoods)
@@ -252,6 +270,7 @@ USING GIN(name gin_trgm_ops);
 #### Implementation Steps
 
 1. **Store location polygons**
+
 ```sql
 CREATE TABLE locations (
     id BIGINT PRIMARY KEY,
@@ -262,12 +281,13 @@ CREATE TABLE locations (
 ```
 
 2. **Pre-compute business locations**
+
 ```json
 {
-    "id": "123",
-    "name": "Pizza Place",
-    "location_names": ["bay_area", "san_francisco", "mission_district"],
-    "category": "restaurant"
+  "id": "123",
+  "name": "Pizza Place",
+  "location_names": ["bay_area", "san_francisco", "mission_district"],
+  "category": "restaurant"
 }
 ```
 
@@ -276,27 +296,28 @@ CREATE TABLE locations (
 ## 🚀 Scaling Strategies
 
 ### Read Scaling Pattern
+
 ```mermaid
 graph TB
     Client[Clients]
     LB[Load Balancer]
-    
+
     subgraph "Application Tier"
         S1[Service 1]
         S2[Service 2]
         S3[Service N]
     end
-    
+
     subgraph "Caching Layer"
         C1[Redis Cluster]
     end
-    
+
     subgraph "Database Tier"
         Master[(Primary DB)]
         R1[(Read Replica 1)]
         R2[(Read Replica 2)]
     end
-    
+
     Client --> LB
     LB --> S1 & S2 & S3
     S1 & S2 & S3 --> C1
@@ -306,6 +327,7 @@ graph TB
 ```
 
 ### Caching Strategy
+
 - **Business details**: Cache with TTL ~1 hour
 - **Search results**: Cache with shorter TTL ~5 minutes
 - **Average ratings**: Can be cached since updates are synchronous
@@ -313,16 +335,19 @@ graph TB
 ## 🎓 Level-Specific Expectations
 
 ### Mid-Level
+
 - Create working high-level design
 - Understand basic search optimization
 - Problem-solve rating calculation approaches
 
 ### Senior
+
 - Master all deep dives except advanced search
 - Justify technology choices with tradeoffs
 - Understand different index types
 
 ### Staff+
+
 - Recognize simplicity opportunities:
   - No message queue needed (low write volume)
   - Single DB instance sufficient (small data)
@@ -333,6 +358,7 @@ graph TB
 ## 💡 Key Interview Tips
 
 ### Do's
+
 1. **Start simple**, add complexity only when needed
 2. **Quantify everything** with numbers
 3. **Consider read/write patterns** early
@@ -340,6 +366,7 @@ graph TB
 5. **Discuss tradeoffs** explicitly
 
 ### Don'ts
+
 1. Don't over-engineer for small data/traffic
 2. Don't use Elasticsearch as primary database
 3. Don't ignore database constraints for business logic
@@ -348,16 +375,19 @@ graph TB
 ## 🔍 Common Follow-up Questions
 
 1. **How to handle trending/popular businesses?**
+
    - Hot partition problem
    - Solution: Caching, read replicas, eventual consistency
 
 2. **How to prevent review spam/abuse?**
+
    - Rate limiting
    - User verification
    - ML-based spam detection
    - Human moderation queue
 
 3. **How to implement "near me" searches?**
+
    - Geolocation from IP/GPS
    - Quadtree for efficient radius search
    - Second-pass filtering with Haversine formula
@@ -382,7 +412,7 @@ graph TB
             "distance": "10km",
             "location": {
               "lat": 40.7128,
-              "lon": -74.0060
+              "lon": -74.006
             }
           }
         },
@@ -397,28 +427,31 @@ graph TB
 
 ## 🔧 Technology Stack Summary
 
-| Component | Technology | Why |
-|-----------|------------|-----|
-| **Primary DB** | PostgreSQL | ACID, reliable, sufficient for our scale |
-| **Search** | Elasticsearch OR PostgreSQL + Extensions | Depends on scale needs |
-| **Cache** | Redis | Fast, supports geo operations |
-| **CDC** | Debezium/Kafka | Reliable change capture |
-| **API Gateway** | Kong/AWS API Gateway | Rate limiting, auth |
+| Component       | Technology                               | Why                                      |
+| --------------- | ---------------------------------------- | ---------------------------------------- |
+| **Primary DB**  | PostgreSQL                               | ACID, reliable, sufficient for our scale |
+| **Search**      | Elasticsearch OR PostgreSQL + Extensions | Depends on scale needs                   |
+| **Cache**       | Redis                                    | Fast, supports geo operations            |
+| **CDC**         | Debezium/Kafka                           | Reliable change capture                  |
+| **API Gateway** | Kong/AWS API Gateway                     | Rate limiting, auth                      |
 
 ## 📊 Back-of-Envelope Calculations
 
 ### Storage
+
 - Businesses: 10M × 1KB = 10GB
 - Reviews: 10M × 100 × 1KB = 1TB
 - Indexes: ~200GB
 - **Total**: ~1.2TB (fits in single instance)
 
 ### Throughput
+
 - Reads: 100M DAU × 10 searches/day = 11,500 QPS
 - Writes: 100K reviews/day = 1 write/second
 - **Read/Write Ratio**: 10,000:1
 
 ### Latency Targets
+
 - Search: < 500ms (p99)
 - Business view: < 200ms (p99)
 - Review submission: < 1s (p99)
@@ -434,3 +467,143 @@ For the given scale (100M DAU, 10M businesses):
 5. **Database constraints** for business logic
 
 This keeps the system simple while meeting all requirements. Scale up to Elasticsearch and sharding only when data exceeds single-instance capacity (~10TB).
+
+# Yelp System Design - Last Minute Revision
+
+## 🎯 Core Requirements (30 seconds)
+
+- **Search** businesses by name, location, category
+- **View** business details and reviews
+- **Leave reviews** with 1-5 star rating + optional text
+- **100M DAU, 10M businesses, ~1TB data**
+- **Read-heavy**: 1000:1 read/write ratio
+
+## 📊 Key Numbers to Remember
+
+- **Storage**: 10M businesses × 1KB = 10GB, Reviews = 1TB total
+- **Traffic**: 11,500 QPS reads, 1 write/second
+- **Latency**: Search < 500ms, View < 200ms
+
+## 🏗️ High-Level Architecture
+
+- **API Gateway** → **Business Service** + **Review Service** → **PostgreSQL** + **Elasticsearch** + **Redis Cache**
+- **CDC Pipeline** keeps search index in sync
+
+## 🔥 Critical Deep Dives
+
+### Average Rating Calculation
+
+- **❌ Bad**: JOIN on every search (expensive)
+- **✅ Good**: Periodic cron job (stale data)
+- **✅✅ Best**: Synchronous update with optimistic locking
+  ```sql
+  new_avg = (old_avg * num_reviews + new_rating) / (num_reviews + 1)
+  UPDATE businesses SET avg_rating = ? WHERE id = ? AND num_ratings = ?
+  ```
+
+### One Review Per User Constraint
+
+- **❌ Bad**: Application-level check (race conditions)
+- **✅✅ Best**: Database constraint `UNIQUE(user_id, business_id)`
+
+### Search Implementation
+
+- **Location**: Geospatial index (PostGIS or Elasticsearch)
+- **Name/Text**: Full-text search (pg_trgm or Elasticsearch)
+- **Category**: Standard B-tree index
+
+## ⚖️ PostgreSQL vs Elasticsearch Decision
+
+### PostgreSQL + Extensions (Recommended for this scale)
+
+- **Pros**: Single DB, strong consistency, simpler ops
+- **Use when**: Data < 10TB, < 50K QPS
+
+### Elasticsearch
+
+- **Pros**: Purpose-built search, better at massive scale
+- **Cons**: Eventual consistency, not primary DB, complex ops
+- **Use when**: Data > 10TB, > 50K QPS
+
+## 🚀 Scaling Pattern
+
+```
+Load Balancer → Multiple App Servers → Redis Cache → PostgreSQL (Primary + Read Replicas)
+```
+
+## 🎓 Level-Specific Expectations
+
+### Mid-Level
+
+- Draw basic architecture diagram
+- Explain rating calculation approaches
+- Understand caching strategy
+
+### Senior
+
+- Master all deep dives
+- Justify PostgreSQL vs Elasticsearch choice
+- Explain different index types
+
+### Staff+
+
+- Recognize simplicity opportunities (no queue needed, single DB sufficient)
+- Know when to add complexity
+- Focus on operational simplicity
+
+## 💡 Key Interview Points
+
+### Start Simple
+
+- Single PostgreSQL instance is sufficient for 1TB
+- No message queue needed (only 1 write/second)
+- Use database constraints for business logic
+
+### Common Tradeoffs
+
+- **Consistency vs Performance**: Synchronous updates vs async
+- **Simplicity vs Scale**: PostgreSQL extensions vs Elasticsearch
+- **Cost vs Performance**: Single DB vs sharded setup
+
+### Caching Strategy
+
+- **Business details**: 1 hour TTL
+- **Search results**: 5 minute TTL
+- **Ratings**: Long TTL (synchronous updates)
+
+## 🔍 Follow-up Questions & Answers
+
+**"How to handle spam reviews?"**
+
+- Rate limiting, user verification, ML detection, human moderation
+
+**"How to find nearby businesses?"**
+
+- Geolocation from IP/GPS, geospatial index with radius search
+
+**"What if a business gets too popular?"**
+
+- Caching, read replicas, eventual consistency for hot partitions
+
+**"How to handle business chain updates?"**
+
+- Bulk APIs, event-driven updates, batch processing
+
+## 📋 Quick Technology Stack
+
+- **Primary DB**: PostgreSQL (ACID, reliable)
+- **Search**: PostgreSQL + PostGIS + pg_trgm (simple) OR Elasticsearch (scale)
+- **Cache**: Redis (geo support, fast)
+- **CDC**: Debezium/Kafka (reliable sync)
+
+## ⚠️ Common Mistakes to Avoid
+
+- Don't use Elasticsearch as primary database
+- Don't over-engineer with queues for low write volume
+- Don't forget pagination on list endpoints
+- Don't ignore database constraints for business rules
+- Don't start with complex sharding for small data
+
+## 🎯 Closing Statement Template
+
+_"For 100M DAU and 1TB data, I'd start with PostgreSQL + extensions for simplicity and strong consistency. The read-heavy pattern (1000:1) means we can scale reads with replicas and caching. We only need 1 write/second, so no complex queuing. This gives us a maintainable system that meets all requirements while keeping operational complexity low. We'd migrate to Elasticsearch only when we exceed single-instance capacity around 10TB."_

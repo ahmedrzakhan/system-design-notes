@@ -543,3 +543,133 @@ SharedFiles:
    - Tiered storage (frequent vs. archival)
 
 Remember: **Show your thought process, discuss trade-offs, and demonstrate practical experience with distributed systems!**
+
+# Dropbox System Design - Last Minute Revision
+
+## 🎯 Core Requirements (30 seconds)
+
+- **Upload/Download** files from any device
+- **Share files** with other users
+- **Auto-sync** across devices
+- **Large file support** (up to 50GB)
+- **High availability** over consistency (CAP theorem)
+
+## 🏗️ Key Architecture Pattern
+
+**Direct Blob Storage + Presigned URLs**
+
+- Client never sends files through app server
+- App server only handles metadata
+- S3 handles actual file storage
+- CDN for fast global downloads
+
+## 📁 File Upload Evolution (Know This Cold)
+
+1. **❌ Bad**: Upload through server (bottleneck)
+2. **✅ Good**: Direct to S3 with presigned URLs
+3. **🌟 Great**: Chunked upload (5-10MB chunks)
+   - Resumable uploads
+   - Progress tracking
+   - Parallel chunk uploads
+
+## 🔑 Critical Components
+
+- **File Service**: Metadata + presigned URL generation
+- **S3**: Blob storage with event notifications
+- **CDN**: Global caching with signed URLs
+- **Database**: File metadata + SharedFiles table
+
+## 💾 Database Schema (Must Know)
+
+```
+FileMetadata:
+- fileId (PK): SHA-256 fingerprint
+- name, size, mimeType, uploadedBy
+- status: uploading/uploaded/failed
+- chunks: [chunk metadata]
+
+SharedFiles:
+- userId (PK), fileId (SK), permissions
+```
+
+## 🚀 Large File Strategy
+
+- **Problem**: 50GB = 1+ hour upload, timeouts, interruptions
+- **Solution**: File chunking with fingerprints
+- **Benefits**: Resumability, progress, parallel uploads
+- **Implementation**: S3 multipart upload
+
+## 🔄 Sync Strategies
+
+- **Local→Remote**: File system watcher + upload queue
+- **Remote→Local**: WebSocket (fresh files) + polling (stale files)
+- **Conflict Resolution**: Last write wins
+
+## 🔒 Security Essentials
+
+- **Encryption**: HTTPS in transit, S3 server-side at rest
+- **Access Control**: Check SharedFiles before generating URLs
+- **Signed URLs**: Time-limited (5 min) for downloads
+- **CDN Security**: CloudFront signed URLs
+
+## ⚡ Performance Optimizations
+
+- **Compression**: Text files only (not media)
+- **Parallel uploads**: Multiple chunks simultaneously
+- **CDN caching**: Frequently accessed files
+- **Deduplication**: Use file fingerprints as IDs
+
+## 🎪 Common Gotchas & Answers
+
+**Q: "Why not upload through server?"**
+A: Creates bottleneck, expensive, slower than direct S3
+
+**Q: "How handle 50GB files?"**
+A: Chunking - break into 5-10MB pieces, upload in parallel
+
+**Q: "Database consistency?"**
+A: Eventual consistency OK for sync, strong for permissions
+
+**Q: "File versioning?"**
+A: Append-only storage with version pointers in metadata
+
+**Q: "Mobile optimization?"**
+A: Smaller chunks, progressive download, offline cache
+
+## 📊 Level-Specific Expectations
+
+**Mid-Level (E4)**: Basic design + APIs, respond to optimization hints
+**Senior (E5)**: Proactive trade-offs, chunking strategy, CDN benefits
+**Staff+ (E6+)**: Deep expertise, edge cases, complex scalability
+
+## 🔄 Real AWS Implementation
+
+- S3 Multipart Upload (auto-chunking)
+- CloudFront (CDN with signed URLs)
+- API Gateway (rate limiting)
+- DynamoDB (metadata)
+- Lambda (S3 event processing)
+
+## 💡 Interview Success Formula
+
+1. **Start simple** (basic upload/download)
+2. **Add complexity incrementally** (chunking, CDN)
+3. **Justify every choice** (trade-offs, costs)
+4. **Think at scale** (global users, bandwidth)
+5. **Security mindset** (always mention encryption/access)
+
+## 🎯 Money Quotes
+
+- "We choose availability over consistency - users can wait seconds to see synced files"
+- "Presigned URLs eliminate the server bottleneck for file transfers"
+- "Chunking solves the large file problem - resumable, parallel, progress tracking"
+- "File fingerprints enable deduplication and serve as natural primary keys"
+- "Hybrid sync: WebSocket for active files, polling for inactive ones"
+
+## ⚠️ Don't Forget
+
+- Mention **event notifications** from S3 to update chunk status
+- **SharedFiles table** prevents slow "scan all files" queries
+- **CDN cache invalidation** when files are updated
+- **Cost optimization** through selective caching strategies
+- **User experience** - progress bars, resumable operations

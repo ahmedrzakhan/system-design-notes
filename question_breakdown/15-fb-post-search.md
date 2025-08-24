@@ -355,3 +355,164 @@ This is stored in Redis (in-memory) for speed.
 This is a **write-heavy** system (100k likes/sec vs 10k searches/sec). Most of the complexity comes from optimizing writes, not reads. That's why batching and approximate indexing are crucial - you trade perfect accuracy for massive performance gains.
 
 The interviewer wants to see if you recognize this pattern and can design around it rather than just throwing more servers at the problem.
+
+# Facebook Post Search - Last Minute Revision Points
+
+## 🎯 Core Problem Statement
+
+- Design search for Facebook posts with keyword search + sorting (recency/likes)
+- **Key constraint**: No Elasticsearch or full-text search allowed
+- Target: <500ms response time, 10k searches/second
+
+## 📊 Critical Numbers to Remember
+
+- **1B users**, 10k posts/second, 100k likes/second, 10k searches/second
+- **3.6 trillion total posts** (10 years of data)
+- **Write-heavy system**: 100k likes vs 10k searches - this drives design decisions
+
+## 🔑 Essential Design Components
+
+### Inverted Index Structure
+
+- Map keywords → post IDs (not posts → keywords)
+- Example: "taylor" → [post_1, post_5, post_10...]
+- Stored in Redis for sub-millisecond access
+
+### Two Separate Indexes for Sorting
+
+- **Creation Index**: Redis List (RPUSH for append-only)
+- **Likes Index**: Redis Sorted Set (ZADD with like_count as score)
+
+### Write Optimization (Most Important)
+
+- **Logarithmic updates**: Only update at milestones (1, 2, 4, 8, 16... likes)
+- **30-second batching**: Aggregate likes before index updates
+- **Why**: Reduces 100k writes/sec to manageable levels
+
+### Two-Stage Query Architecture
+
+1. **Stage 1**: Get top 2N results from approximate index (fast)
+2. **Stage 2**: Fetch real-time like counts, re-rank to top N (accurate)
+
+## 🚀 Performance Optimizations
+
+### Caching Strategy (3 Layers)
+
+- **CDN**: Geographic edge caching (~10ms)
+- **Redis Search Cache**: Application-level (<1 min TTL)
+- **High hit rate**: No personalization = cacheable results
+
+### Storage Optimization
+
+- **Hot/Cold separation**: Frequent keywords in Redis, rare ones in S3
+- **Index capping**: Limit each keyword to 10k posts max
+- **Trade-off**: Storage efficiency vs completeness
+
+### Multi-keyword Queries
+
+- **Option A**: Intersection + phrase filtering
+- **Option B**: Pre-index bigrams ("Taylor Swift" as single keyword)
+
+## 🏗️ System Architecture Flow
+
+### Write Path
+
+```
+Post/Like → Load Balancer → Event Writer → Kafka →
+Like Batcher → Ingestion Service → Redis Index + Cold Storage
+```
+
+### Read Path
+
+```
+Client → CDN → API Gateway → Search Service →
+Search Cache + Redis Index + Cold Storage
+```
+
+## ⚖️ Key Trade-offs to Discuss
+
+### Consistency vs Performance
+
+- **Eventual consistency**: 1-minute delay acceptable
+- **Approximate index**: Like counts may be slightly stale
+- **Final results**: Always fetch fresh data for accuracy
+
+### Storage vs Speed
+
+- **More indexes = faster queries, more storage**
+- **Hot/cold separation = cost optimization**
+- **Index capping = bounded storage growth**
+
+### Write Optimization vs Accuracy
+
+- **Logarithmic updates = 90% fewer writes, slightly stale data**
+- **Batching = burst handling, some delay**
+
+## 🎓 Level-Specific Focus Points
+
+### Mid-Level
+
+- Explain inverted index clearly
+- Design basic API and data model
+- Identify caching opportunities
+- Acknowledge write bottleneck
+
+### Senior-Level
+
+- Multiple optimization strategies
+- Detailed trade-off analysis
+- Cache layering rationale
+- Handle edge cases
+
+### Staff+ Level
+
+- Two-stage architecture reasoning
+- Logarithmic update mathematics
+- Hot/cold data migration strategy
+- Real-world scaling examples
+
+## 💡 Common Gotchas & Solutions
+
+### "How handle viral posts?"
+
+- **Problem**: Viral post gets 1M likes instantly
+- **Solution**: Batching + logarithmic updates prevent index thrashing
+
+### "What if Redis crashes?"
+
+- **Fallback**: Query cold storage (slower but functional)
+- **Prevention**: Redis replication + circuit breaker
+
+### "How scale globally?"
+
+- **Sharding**: Geographic or hash-based
+- **CDN**: Regional deployment
+- **Replication**: Cross-region for disaster recovery
+
+## 🔥 Interview Power Moves
+
+### Lead with the Insight
+
+"This is write-heavy (100k likes vs 10k searches), so optimization focuses on write path, not read path."
+
+### Show Depth
+
+"We can use HyperLogLog for unique searchers per keyword, or Bloom filters to check post existence before expensive lookups."
+
+### Demonstrate Experience
+
+"In practice, you'd start with simple Redis index, then add batching when you hit write limits around 10k likes/second."
+
+## 📝 Final Checklist
+
+- [ ] Explained why inverted index is necessary
+- [ ] Showed two different sorting approaches
+- [ ] Addressed write volume bottleneck
+- [ ] Designed multi-layer caching
+- [ ] Discussed consistency trade-offs
+- [ ] Mentioned monitoring and failure handling
+- [ ] Scaled the solution (hot/cold, sharding)
+
+## 🎯 One-Liner Summary
+
+"Build inverted index in Redis with logarithmic like updates, two-stage querying for accuracy, and multi-layer caching - optimizing for write-heavy workload while maintaining sub-500ms reads."

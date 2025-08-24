@@ -913,3 +913,162 @@ AND (expiration_time IS NULL OR expiration_time > NOW());
 ---
 
 _Remember: Start simple, then add complexity. Focus on the core requirements first, then dive deep into scaling challenges. Always explain your reasoning and trade-offs!_
+
+# URL Shortener - Last Minute Revision Points
+
+## 🔑 Key System Characteristics
+
+- **Read-Heavy System**: 1000:1 read-to-write ratio (most critical insight)
+- **Scale**: 1B URLs, 100M DAU, ~5,787 RPS average reads, ~1.2 RPS writes
+- **Latency**: <100ms redirections, <200ms URL creation
+- **Storage**: ~500GB for 1B URLs (500 bytes per record)
+
+## 🎯 Core Requirements (Must Know)
+
+- **Functional**: Shorten URLs → Get short codes, Redirect short codes → Original URLs
+- **Non-Functional**: Uniqueness, Low latency, High availability (99.99%), Scalability
+- **Out of Scope**: Authentication, analytics, advanced security
+
+## 🔧 Short Code Generation (Critical Deep Dive)
+
+### ❌ Bad: URL Prefix
+
+- No uniqueness guarantee, collision prone
+
+### ✅ Good: Random/Hash
+
+- **Pros**: Simple, good entropy
+- **Cons**: Birthday problem, collision detection needed, scales poorly
+
+### 🌟 Best: Counter + Base62
+
+- **Why Base62**: URL-safe (a-z, A-Z, 0-9), compact (6 chars = 57B URLs)
+- **Algorithm**: Increment counter → Base62 encode → Store mapping
+- **Benefits**: Guaranteed unique, no collision detection, efficient
+- **Security Issue**: Predictable sequence (abc123 → abc124)
+
+## 🛡️ Security Solutions
+
+- **ID Obfuscation**: Multiply by large prime + add constant
+- **Hash with Salt**: Combine counter + URL hash + secret
+- **Pre-generated Pool**: Background job creates collision-free codes
+- **Trade-off**: Security vs simplicity vs performance
+
+## 🏗️ Architecture Components
+
+### API Design
+
+```
+POST /urls → {short_url}
+GET /{code} → 302 Redirect
+```
+
+- **302 vs 301**: 302 = temporary, no browser caching, allows tracking
+
+### Core Services
+
+- **Write Service**: Handle URL creation, counter management
+- **Read Service**: Handle redirections, cache management
+- **Global Counter**: Redis for atomic increments
+
+### Data Flow
+
+1. **Write**: Validate → Get counter → Encode → Store → Return
+2. **Read**: Check cache → Query DB if miss → Cache result → Redirect
+
+## 🚀 Scaling Strategies (Focus on Reads)
+
+### Caching (Most Important)
+
+- **Redis Cache**: LRU eviction, 24hr TTL, target 80%+ hit ratio
+- **Performance**: Memory (0.0001ms) vs SSD (0.1ms) vs HDD (10ms)
+- **Size**: Cache hot URLs, ~80% of traffic hits 20% of URLs
+
+### Database Optimization
+
+- **Indexing**: Primary key on short_code, O(1) hash or O(log n) B-tree
+- **Replication**: Master-slave for availability and read scaling
+
+### Write Scaling
+
+- **Counter Batching**: Get 1000 counter values at once, use locally
+- **Horizontal Scaling**: Multiple write services share global counter
+
+### Advanced (Mention if Asked)
+
+- **CDN/Edge**: Cache at global edge locations
+- **Microservices**: Separate read/write services
+
+## 📊 Performance Numbers to Remember
+
+- **Daily Load**: 500M redirects/day (100M users × 5 clicks)
+- **Peak Traffic**: 10x average = ~60K RPS
+- **Cache Hit Ratio**: 80%+ essential for performance
+- **Database**: 1.2 writes/sec, 5,787 reads/sec average
+
+## 🏛️ Final Architecture
+
+```
+Client → CDN → Load Balancer → API Gateway
+         ↓
+Write Services (2x) ← Global Counter (Redis)
+Read Services (3x) ← Cache (Redis) ← Database (PostgreSQL)
+         ↓                           ↓
+    Database ← ← ← ← ← ← ← ← ← ← Replicas
+```
+
+## 🎤 Common Follow-ups & Answers
+
+### "How handle expired URLs?"
+
+- **Lazy deletion**: Check expiration during read, return 404
+- **Background cleanup**: Periodic jobs remove expired entries
+
+### "Redis counter fails?"
+
+- **Replication**: Master-slave with automatic failover
+- **Circuit breaker**: Graceful degradation patterns
+
+### "Custom domains?"
+
+- **DNS**: CNAME records, SSL cert management
+- **Validation**: Domain ownership verification
+
+### "Rate limiting?"
+
+- **Token bucket**: Allow bursts with sustained limits
+- **Per-IP limits**: Prevent abuse
+
+## 💡 Interview Strategy
+
+### Start Simple, Add Complexity
+
+1. Basic counter + database
+2. Add Redis caching
+3. Separate read/write services
+4. Discuss security if asked
+5. CDN only if performance demands
+
+### Key Points to Emphasize
+
+- **1000:1 ratio** drives all design decisions
+- **Base62 encoding** rationale
+- **302 redirect** business reasoning
+- **Caching strategy** is critical
+- **Counter batching** shows optimization thinking
+
+### Avoid These Mistakes
+
+- Over-engineering without requirements
+- Ignoring the read-heavy nature
+- Forgetting caching discussion
+- Not explaining trade-offs
+- Dismissing security concerns
+
+## 🎯 Decision Framework
+
+1. **Requirements first**: Clarify functional vs non-functional
+2. **Bottleneck identification**: Focus on reads due to 1000:1 ratio
+3. **Trade-off discussion**: Always explain pros/cons
+4. **Incremental complexity**: Add features only when needed
+5. **Business impact**: Connect technical decisions to user experience

@@ -441,3 +441,165 @@ d) **Dispatcher Service:** Direct routing without pub/sub
 - DynamoDB works well for simple comment storage with high throughput
 
 The key insight is recognizing this is a **fan-out problem** - one comment must reach potentially millions of viewers efficiently. The solution evolves from simple but inefficient to complex but scalable.
+
+# Facebook Live Comments - Last Minute Revision Guide
+
+## 🎯 The Core Problem
+
+- Build real-time commenting system for live videos
+- Scale: Millions of viewers, thousands of comments/sec per video
+- Latency: < 200ms end-to-end
+- **Key Challenge**: Fan-out problem - one comment to millions of viewers
+
+## 📊 Requirements Summary
+
+- **Functional**: Post comments, real-time updates, historical comments
+- **Non-Functional**: Scale > consistency, low latency, high availability
+- **Out of Scope**: Replies, reactions, moderation, auth
+
+## 🏗️ Basic Architecture
+
+- **Database**: DynamoDB with videoId (partition key) + createdAt (sort key)
+- **API**: POST/GET endpoints with cursor pagination
+- **Schema**: commentId, videoId, content, author, createdAt
+
+## 🔄 Real-time Solutions Evolution
+
+### ❌ Polling (Bad)
+
+- Clients ask server every few seconds for new comments
+- **Problems**: Database overload, high latency, wasteful
+
+### ✅ Server-Sent Events (Good)
+
+- Server pushes comments to clients via persistent HTTP connection
+- **Why SSE over WebSocket**: Read-heavy workload, one-way communication, lower overhead
+- **Benefits**: Auto-reconnection with Last-Event-ID header
+
+## 📈 Horizontal Scaling Challenge
+
+When multiple servers exist, viewers of same video might connect to different servers - how does Server A notify viewers on Server B?
+
+### Solution Evolution:
+
+#### 1️⃣ Simple Pub/Sub (Inefficient)
+
+- All servers subscribe to ALL comments
+- **Problem**: Every server processes every comment
+
+#### 2️⃣ Partitioned Pub/Sub (Better)
+
+- Create topics per video or hash videos into N topics
+- **Problem**: Round-robin LB still scatters viewers randomly
+
+#### 3️⃣ Layer 7 LB + Consistent Hashing (Great)
+
+- Route viewers of same video to same server
+- Servers only subscribe to relevant topics
+- **Best balance** of efficiency and simplicity
+
+#### 4️⃣ Dispatcher Service (Alternative)
+
+- Direct routing without pub/sub overhead
+- Dispatcher tracks server-to-video mapping
+- Uses service discovery (Zookeeper/etcd)
+
+## 💡 Key Technology Decisions
+
+### Database: DynamoDB
+
+- **Why**: High write throughput, auto-sharding, built-in pagination
+- **Schema**: Partition by videoId for distribution, sort by timestamp
+
+### Real-time: Server-Sent Events
+
+- **Why**: Perfect for read-heavy, one-way communication
+- **Benefits**: Browser support, auto-reconnection, HTTP-based
+
+### Pagination: Cursor-based
+
+- **Why**: Efficient with indexes, stable results
+- **Implementation**: Use commentId < lastCommentId with LIMIT
+
+## 🎨 Architecture Patterns
+
+- **Fan-out on Write**: Comment service publishes to pub/sub
+- **Co-location**: Route same video viewers to same server
+- **Eventual Consistency**: Acceptable for comment ordering
+
+## 📊 Performance Targets
+
+- **Latency**: < 200ms (push model)
+- **Scale**: Millions concurrent viewers
+- **Throughput**: Thousands comments/sec
+- **Availability**: 99.9% (multiple servers, auto-reconnect)
+
+## 🎯 Interview Level Expectations
+
+### Mid-Level (L4)
+
+- Identify polling problems
+- Propose SSE/WebSocket
+- Basic pub/sub understanding
+
+### Senior (L5)
+
+- Design complete architecture
+- Discuss scaling trade-offs
+- Consider pagination approaches
+
+### Staff+ (L6+)
+
+- Multiple scaling solutions
+- Deep technology trade-offs
+- Production considerations
+
+## 🔧 Common Interview Questions & Answers
+
+### "Why SSE over WebSockets?"
+
+- Read-heavy workload doesn't need bidirectional
+- Lower overhead and simpler implementation
+- Built-in auto-reconnection
+
+### "How handle server failures?"
+
+- SSE auto-reconnects with Last-Event-ID
+- Multiple server replicas
+- Graceful degradation to polling
+
+### "What about message ordering?"
+
+- Use timestamps for client-side ordering
+- DynamoDB sort key ensures consistency
+- Client deduplication for reliability
+
+### "How scale beyond single datacenter?"
+
+- Regional deployments with replication
+- Edge servers for SSE connections
+- Cross-region pub/sub topics
+
+## 🚀 Production Enhancements
+
+- **Rate Limiting**: Prevent spam
+- **Caching**: Redis for recent comments
+- **CDN**: Global static asset delivery
+- **Monitoring**: Latency/connection tracking
+- **Content Moderation**: ML filtering pipeline
+
+## 🎓 Key Takeaways
+
+1. **Fan-out Problem**: One comment → millions of viewers efficiently
+2. **Technology Choice**: SSE perfect for read-heavy, one-way communication
+3. **Scaling Strategy**: Co-locate viewers + partitioned pub/sub
+4. **Database Design**: Partition by videoId, sort by timestamp
+5. **Iteration**: Start simple, scale incrementally based on bottlenecks
+
+## 🔥 Must-Remember Points
+
+- **Core Challenge**: Real-time fan-out at massive scale
+- **Solution**: SSE + Layer 7 LB + Partitioned Pub/Sub
+- **Database**: DynamoDB with smart partitioning
+- **Pagination**: Cursor-based for stability
+- **Trade-off**: Eventual consistency for availability/performance

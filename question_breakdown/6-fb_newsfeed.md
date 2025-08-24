@@ -353,3 +353,118 @@ graph TD
 - **Write throughput**: posts_per_second × average_followers
 - **Read throughput**: users × feed_requests_per_day / 86400
 - **Cache size**: hot_posts × post_size × replication_factor
+
+# Facebook News Feed - Last Minute Revision
+
+## Core Problem
+
+• **Fan-out problem**: How to efficiently distribute posts to millions of followers
+• **Read-heavy system**: Users read feeds constantly but post rarely
+• **Scale**: 2B users, unlimited follows, <500ms response times
+
+## Key Architecture Decisions
+
+### Database Design
+
+• **Posts Table**: `postId` (PK), GSI on `creatorId` + `createdAt` for user posts
+• **Follow Table**: `userFollowing` (PK), `userFollowed` (SK), GSI reversed for followers
+• **PrecomputedFeed Table**: `userId` (PK), `createdAt` (SK), stores 200 recent post IDs
+
+### Fan-out Strategies
+
+• **Fan-out on Write**: Precompute feeds, good for normal users
+• **Fan-out on Read**: Generate on-demand, good for celebrities
+• **Hybrid Approach**: Combine both - precompute normal users, fetch celebrities live
+
+### Scaling Solutions
+
+#### Celebrity Problem (High Fan-out on Write)
+
+• **Solution**: Async workers with SQS queues
+• **Better**: Hybrid - don't precompute celebrity feeds, merge at read time
+
+#### Hot Posts Problem
+
+• **Good**: Distributed cache sharding
+• **Great**: Redundant cache - same hot posts in multiple instances
+
+#### Many Follows Problem (High Fan-out on Read)
+
+• **Solution**: PrecomputedFeed table stores recent 200 posts per user
+• **Storage calc**: 10 bytes × 200 posts × 2B users = 4TB (reasonable)
+
+## API Endpoints
+
+```
+POST /posts              → Create post
+PUT /users/{id}/followers → Follow user
+GET /feed?cursor=X       → Get paginated feed
+```
+
+## Feed Generation Algorithm
+
+1. **Check precomputed feed** for current user
+2. **Merge celebrity posts** from non-precomputed follows
+3. **Sort chronologically** and apply cursor pagination
+4. **Cache results** for performance
+
+## Technology Stack
+
+• **DynamoDB**: Scales well, handles uneven load distribution
+• **Redis**: Post caching with LRU eviction
+• **SQS**: Reliable async processing for high fan-out
+• **Why not graph DB**: Simple requirements don't need complexity
+
+## Key Metrics & Monitoring
+
+• **Latency**: Feed generation <500ms
+• **Cache hit ratio**: Optimize for frequently read posts
+• **Queue depth**: Monitor async worker backlog
+• **Storage growth**: Track precomputed feed size
+
+## Interview Level Expectations
+
+### Mid-Level (E4) - 80% Breadth, 20% Depth
+
+• Define APIs and basic data model
+• Create functional high-level architecture
+• May need guidance on scaling challenges
+
+### Senior (E5) - 60% Breadth, 40% Depth
+
+• Speed through basics to focus on 2+ deep dives
+• Proactively identify fan-out bottlenecks
+• Explain trade-offs between solutions
+
+### Staff+ (E6+) - 40% Breadth, 60% Depth
+
+• Cover all deep dives independently
+• Demonstrate real-world technology experience
+• Discuss detailed performance optimizations
+
+## Critical Don'ts
+
+• **Don't over-engineer early** - start simple, add complexity
+• **Don't ignore product constraints** - ask about limits
+• **Don't forget hot keys** - viral content creates uneven load
+• **Don't skip storage calculations** - always verify requirements
+• **Don't ignore consistency trade-offs** - CAP theorem matters
+
+## Smart Questions to Ask
+
+• "Should we set limits on follows/followers?"
+• "How important is real-time vs eventual consistency?"
+• "What's the read/write ratio we're optimizing for?"
+• "Are there specific latency requirements for different user tiers?"
+
+## Quick Calculations
+
+• **Write throughput**: posts/sec × avg_followers = fan-out load
+• **Storage per user**: 10 bytes × 200 posts = 2KB precomputed feed
+• **Cache sizing**: hot_posts × post_size × replication_factor
+
+## Remember: Focus on Trade-offs
+
+• **Consistency vs Performance**: 1-minute staleness acceptable
+• **Storage vs Compute**: Precompute feeds vs generate on-demand
+• **Simplicity vs Optimization**: Start basic, optimize bottlenecks

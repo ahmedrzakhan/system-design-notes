@@ -470,3 +470,115 @@ graph LR
 ---
 
 **Remember**: Start simple, build incrementally, and always justify your scaling decisions with concrete numbers and trade-offs!
+
+# Google News System Design - Last Minute Revision
+
+## 🎯 Core Problem
+
+- **What**: News aggregator serving 100M DAU, redirects to publishers
+- **Scale**: 100M DAU → 500M spike, <200ms latency
+- **CAP**: Availability > Consistency (stale news > no news)
+
+## 🏗️ High-Level Architecture
+
+- **API Gateway** → **Feed Service** → **Database**
+- **Data Collection Service** → polls RSS feeds → stores articles
+- **S3 + CDN** for thumbnails
+- **Separate read/write services** for different scaling needs
+
+## 🔑 Key Entities
+
+```
+Article: id, title, summary, thumbnailUrl, publishDate, url, region, publisherId
+Publisher: id, name, rssFeedUrl, lastScraped, region
+User: id, region
+```
+
+## 🚀 Critical Scaling Solutions
+
+### 1. Pagination - Use Cursors, Not Offset
+
+- **❌ Bad**: `LIMIT 20 OFFSET 40` (breaks with new articles)
+- **✅ Good**: `WHERE published_at < cursor`
+- **🌟 Best**: ULID-based cursor (time-ordered, no collisions)
+
+### 2. Low Latency - Redis Cache
+
+- **❌ Bad**: Direct DB queries (too slow)
+- **✅ Good**: Redis cache with TTL
+- **🌟 Best**: CDC → Real-time Redis updates (sub-5ms reads)
+
+### 3. Fast Discovery - Webhooks
+
+- **❌ Bad**: 3-6 hour polling (too slow)
+- **✅ Good**: Smart polling (5min high-priority, 30min medium)
+- **🌟 Best**: Publisher webhooks → 30-second updates
+
+### 4. Media Delivery - CDN
+
+- **❌ Bad**: Database blobs (kills performance)
+- **✅ Good**: S3 storage
+- **🌟 Best**: S3 + CloudFront CDN + multiple image sizes
+
+### 5. Traffic Spikes - Regional + Horizontal Scaling
+
+- **Regional deployment** (news is regional)
+- **Auto-scaling groups** for Feed Service
+- **Redis replicas** (100 instances for 10M concurrent)
+
+## 💾 Technology Stack
+
+- **Database**: PostgreSQL (proper indexing)
+- **Cache**: Redis Sorted Sets (O(log N), microsecond latency)
+- **Storage**: S3 + CloudFront CDN
+- **Not Elasticsearch**: Overkill for chronological data
+
+## 🎯 Bonus Features
+
+### Category Feeds
+
+- **🌟 Best**: In-memory filtering (cache full metadata, filter in app)
+- Avoids memory explosion of separate category caches
+
+### Personalization
+
+- **🌟 Best**: Dynamic assembly from category feeds
+- User preference vector → mix feeds (60% tech, 30% business, 10% trending)
+
+## 📊 Key Numbers
+
+- **100M DAU**, spikes to **500M**
+- **<200ms** feed load time
+- **<30 minutes** new article discovery
+- **~100k req/sec** per Redis instance
+- **1000-2000** articles cached per region
+
+## ❓ Questions to Ask Interviewer
+
+- Can I black box the ingestion pipeline?
+- Do publishers maintain RSS feeds?
+- Can we assume webhook cooperation?
+- Global vs regional deployment priority?
+
+## 🚫 Common Mistakes to Avoid
+
+- Database blob storage for images
+- Offset-based pagination at scale
+- Real-time scoring for personalization
+- Single global deployment
+- Elasticsearch for simple chronological sorting
+
+## 🔄 Request Flow (30 seconds)
+
+1. **Client** → API Gateway → Feed Service
+2. **Feed Service** → Redis cache lookup
+3. **Cache hit** → return articles + S3 URLs
+4. **Client** loads thumbnails from CDN directly
+
+## 🏆 Win the Interview
+
+- **Start simple**, build incrementally
+- **Justify decisions** with concrete numbers
+- **Highlight trade-offs** (availability vs consistency)
+- **Show scaling patterns** (read-heavy → aggressive caching)
+- **Ask clarifying questions** early
