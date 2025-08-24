@@ -383,3 +383,61 @@ eventSource.addEventListener("error", () => {
 - **Load Balancing**: Layer 4 vs Layer 7, Consistent Hashing
 - **Coordination**: Zookeeper, etcd, Consul
 - **Caching**: Redis, Memcached, CDN strategies
+
+Here's a concise explanation of the Facebook Live Comments system design:
+
+## The Core Problem
+
+You need to build a system where millions of viewers can post and see comments on live videos in real-time (< 200ms latency).
+
+## Key Design Decisions
+
+**1. Basic Architecture**
+
+- Comments stored in DynamoDB (partitioned by videoId, sorted by timestamp)
+- Comment Management Service handles creates/reads
+- Real-time delivery to viewers is the main challenge
+
+**2. Real-time Delivery Evolution**
+
+**Polling (Bad):** Clients ask server every few seconds for new comments
+
+- Problem: Doesn't scale, wastes resources, high latency
+
+**Server-Sent Events (Good):** Server pushes comments to clients
+
+- One-way persistent HTTP connection
+- Perfect for read-heavy workload (most viewers don't comment)
+- Auto-reconnection with Last-Event-ID
+
+**3. Scaling Challenge**
+When you have multiple servers, viewers of the same video might connect to different servers. How does Server A know to send a new comment to viewers on Server B?
+
+**Solutions (Progressive Complexity):**
+
+a) **Simple Pub/Sub:** All servers subscribe to ALL comments
+
+- Problem: Every server processes every comment (wasteful)
+
+b) **Partitioned Pub/Sub:** Create topics per video (or hash videos into N topics)
+
+- Better: Servers only subscribe to relevant topics
+- Problem: Round-robin LB still scatters viewers randomly
+
+c) **Layer 7 LB + Pub/Sub:** Route viewers of same video to same server
+
+- Use consistent hashing on videoId
+- Minimizes topic subscriptions per server
+
+d) **Dispatcher Service:** Direct routing without pub/sub
+
+- Dispatcher tracks which server handles which video
+- Routes comments directly to correct servers
+
+**4. Other Important Aspects**
+
+- Use cursor pagination (not offset) for loading historical comments
+- SSE chosen over WebSockets because it's simpler for one-way communication
+- DynamoDB works well for simple comment storage with high throughput
+
+The key insight is recognizing this is a **fan-out problem** - one comment must reach potentially millions of viewers efficiently. The solution evolves from simple but inefficient to complex but scalable.
