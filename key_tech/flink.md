@@ -50,7 +50,7 @@ graph TB
     ZK --> JM3
 
     style JM1 fill:#4CAF50
-    style ZK fill:#FF9800
+    style ZK fill:#2196F3
 ```
 
 **Job Manager**: Coordinator that schedules tasks, manages checkpoints, handles failures
