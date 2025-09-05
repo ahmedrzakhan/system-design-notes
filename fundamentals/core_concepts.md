@@ -21,8 +21,8 @@ graph TD
     C --> C3[More Complexity]
     C --> C4[Nearly Unlimited Scale]
 
-    style B fill:#e8f5e8
-    style C fill:#e3f2fd
+    style B fill:#5A0D16
+    style C fill:#1E4C50
 ```
 
 **Key Insights**:
@@ -52,10 +52,10 @@ flowchart TD
     D --> D2[Consistency]
     D --> D3[Race Conditions]
 
-    style A fill:#ffebee
-    style B fill:#e8f5e8
-    style C fill:#e3f2fd
-    style D fill:#fff3e0
+    style A fill:#5A0D16
+    style B fill:#1E4C50
+    style C fill:#5A0D16
+    style D fill:#1E4C50
 ```
 
 ---
@@ -84,8 +84,8 @@ graph LR
 
     H[Add/Remove Node] --> I[Minimal Data Movement]
 
-    style A fill:#e3f2fd
-    style I fill:#e8f5e8
+    style A fill:#5A0D16
+    style I fill:#1E4C50
 ```
 
 ### Anti-Patterns to Avoid
@@ -100,8 +100,8 @@ flowchart TD
     E --> G[One Node 90% Busy]
     E --> H[Others 10% Busy]
 
-    style A fill:#ffebee
-    style E fill:#ffebee
+    style A fill:#1E4C50
+    style E fill:#5A0D16
 ```
 
 **Better Approaches**:
@@ -136,8 +136,8 @@ graph TD
     E[In Practice] --> F[Choose: CP or AP]
     F --> G[Usually choose AP]
 
-    style D fill:#e8f5e8
-    style G fill:#e3f2fd
+    style D fill:#1E4C50
+    style G fill:#5A0D16
 ```
 
 ### When to Choose Each Model
@@ -157,8 +157,8 @@ flowchart LR
     D --> D2[Inventory Management]
     D --> D3[Booking Systems]
 
-    style C fill:#e8f5e8
-    style D fill:#ffebee
+    style C fill:#5A0D16
+    style D fill:#1E4C50
 ```
 
 **Interview Default**: Choose **Availability** unless strong consistency is explicitly required
@@ -248,9 +248,9 @@ graph TD
     D --> D2[Full-text Search]
     D --> D3[Vector/ML]
 
-    style B fill:#e8f5e8
-    style C fill:#e3f2fd
-    style D fill:#fff3e0
+    style B fill:#1E4C50
+    style C fill:#5A0D16
+    style D fill:#1E4C50
 ```
 
 ### Database Indexing Best Practices
@@ -269,8 +269,8 @@ flowchart TD
     D --> D2[Redis]
     D --> D3[Custom Solution]
 
-    style C fill:#e8f5e8
-    style D fill:#fff3e0
+    style C fill:#5A0D16
+    style D fill:#1E4C50
 ```
 
 ### ElasticSearch as Secondary Index
@@ -285,9 +285,9 @@ graph LR
     E --> G[Additional Failure Point]
     E --> H[Extra Latency]
 
-    style A fill:#e3f2fd
-    style C fill:#fff3e0
-    style E fill:#ffebee
+    style A fill:#1E4C50
+    style C fill:#5A0D16
+    style E fill:#1E4C50
 ```
 
 **ElasticSearch Capabilities**:
@@ -329,10 +329,10 @@ graph TD
     H --> H1[Near Real-time]
     H --> H2[Standard Load Balancers]
 
-    style C fill:#e8f5e8
-    style E fill:#e3f2fd
-    style F fill:#fff3e0
-    style H fill:#f3e5f5
+    style C fill:#1E4C50
+    style E fill:#5A0D16
+    style F fill:#1E4C50
+    style H fill:#5A0D16
 ```
 
 ### Internal vs External Protocols
@@ -357,9 +357,9 @@ graph TD
     F --> H[Horizontal Scaling]
     F --> I[Connection Management]
 
-    style C fill:#e3f2fd
-    style D fill:#fff3e0
-    style F fill:#e8f5e8
+    style C fill:#5A0D16
+    style D fill:#1E4C50
+    style F fill:#5A0D16
 ```
 
 ---
@@ -386,9 +386,9 @@ graph TD
     D --> D2[Request Throttling]
     D --> D3[Input Validation]
 
-    style B fill:#e8f5e8
-    style C fill:#e3f2fd
-    style D fill:#fff3e0
+    style B fill:#1E4C50
+    style C fill:#5A0D16
+    style D fill:#1E4C50
 ```
 
 ### Security Best Practices
@@ -407,9 +407,9 @@ flowchart LR
     I --> K[Access Logging]
     I --> L[Input Sanitization]
 
-    style B fill:#e8f5e8
-    style E fill:#e3f2fd
-    style I fill:#fff3e0
+    style B fill:#1E4C50
+    style E fill:#5A0D16
+    style I fill:#1E4C50
 ```
 
 **Key Principles**:
@@ -446,9 +446,9 @@ graph TD
     D --> D3[Feature Usage]
     D --> D4[Tools: Analytics, Mixpanel]
 
-    style B fill:#e8f5e8
-    style C fill:#e3f2fd
-    style D fill:#fff3e0
+    style B fill:#1E4C50
+    style C fill:#1E4C50
+    style D fill:#5A0D16
 ```
 
 ### Monitoring Metrics Matrix
@@ -477,9 +477,9 @@ flowchart LR
     D[Goal] --> E[Catch Problems Early]
     E --> F[Leading Indicators]
 
-    style B fill:#e8f5e8
-    style C fill:#ffebee
-    style F fill:#e8f5e8
+    style B fill:#1E4C50
+    style C fill:#5A0D16
+    style F fill:#1E4C50
 ```
 
 ---
@@ -509,10 +509,10 @@ graph TD
     E --> E1[Failure Isolation]
     E --> E2[Graceful Degradation]
 
-    style B fill:#e8f5e8
-    style C fill:#e3f2fd
-    style D fill:#fff3e0
-    style E fill:#f3e5f5
+    style B fill:#1E4C50
+    style C fill:#5A0D16
+    style D fill:#1E4C50
+    style E fill:#5A0D16
 ```
 
 ### Anti-Patterns to Avoid
@@ -536,11 +536,11 @@ flowchart TD
     E --> E1[Tight Data Coupling]
     E --> E2[Schema Change Conflicts]
 
-    style A fill:#ffebee
-    style B fill:#ffebee
-    style C fill:#ffebee
-    style D fill:#ffebee
-    style E fill:#ffebee
+    style A fill:#1E4C50
+    style B fill:#5A0D16
+    style C fill:#1E4C50
+    style D fill:#5A0D16
+    style E fill:#1E4C50
 ```
 
 ---
@@ -565,10 +565,10 @@ flowchart TD
     K{Sensitive Data?} --> L[Security Layer]
     L --> M[Auth + Encryption + Rate Limiting]
 
-    style C fill:#e3f2fd
-    style F fill:#fff3e0
-    style I fill:#e8f5e8
-    style L fill:#f3e5f5
+    style C fill:#1E4C50
+    style F fill:#5A0D16
+    style I fill:#1E4C50
+    style L fill:#5A0D16
 ```
 
 ### When to Apply Each Concept
