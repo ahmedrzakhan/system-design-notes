@@ -34,9 +34,9 @@
 
 ```mermaid
 graph TD
-    A[/chat-app] --> B[/servers]
-    A --> C[/users]
-    A --> D[/config]
+    A[chat-app] --> B[servers]
+    A --> C[users]
+    A --> D[config]
 
     B --> E[server1<br/>192.168.1.101:8080]
     B --> F[server2<br/>192.168.1.102:8080]
@@ -48,13 +48,13 @@ graph TD
     D --> J[max_users<br/>10000]
     D --> K[message_rate<br/>100/sec]
 
-    style E fill:#e8f5e9
-    style F fill:#e8f5e9
-    style G fill:#e8f5e9
-    style H fill:#e8f5e9
-    style I fill:#e8f5e9
-    style J fill:#fff3e0
-    style K fill:#fff3e0
+    style E fill:#5A0D16
+    style F fill:#5A0D16
+    style G fill:#5A0D16
+    style H fill:#5A0D16
+    style I fill:#5A0D16
+    style J fill:#1E4C50
+    style K fill:#1E4C50
 ```
 
 **Three Types of ZNodes**:
